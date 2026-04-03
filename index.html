@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obecní písmena</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            line-height: 1.5; 
+            max-width: 900px; 
+            margin: 10px auto; 
+            padding: 0 15px; 
+            background-color: #f4f4f9; 
+            color: #333;
+        }
+        h1 { font-size: 1.5rem; color: #2c3e50; text-align: center; }
+        
+        textarea { 
+            width: 100%; 
+            height: 250px; 
+            font-family: 'Cascadia Code', 'Courier New', monospace; 
+            font-size: 16px; /* Prevence zoomu na iOS při focusu */
+            padding: 12px; 
+            border: 2px solid #bdc3c7; 
+            border-radius: 8px; 
+            box-sizing: border-box;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+            resize: vertical;
+        }
+        
+        #output { margin-top: 20px; }
+
+        .output-row { 
+            background: white; 
+            border-left: 5px solid #3498db; 
+            margin-bottom: 12px; 
+            padding: 12px; 
+            border-radius: 0 8px 8px 0; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+        }
+        
+        .error { 
+            border-left-color: #e74c3c; 
+            background-color: #fff5f5; 
+        }
+        
+        .stats { font-weight: bold; margin: 5px 0; color: #2c3e50; }
+        
+        .inventory { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 6px; 
+            font-family: monospace; 
+            font-size: 0.85em; 
+            margin-top: 8px;
+        }
+        
+        .char-tag { 
+            background: #ecf0f1; 
+            padding: 2px 8px; 
+            border: 1px solid #dcdde1; 
+            border-radius: 4px; 
+            font-weight: 600;
+        }
+
+        /* Mobilní úpravy */
+        @media (max-width: 600px) {
+            body { margin: 5px auto; padding: 0 10px; }
+            h1 { font-size: 1.2rem; }
+            textarea { height: 200px; font-size: 14px; }
+            .output-row { padding: 10px; font-size: 0.95em; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Obecní písmena</h1>
+    <textarea id="inputText" placeholder="Zadejte data..."></textarea>
+    <div id="output"></div>
+
+<script>
+    const WORD_REWARDS = { 1: 0, 2: 1, 3: 3, 4: 5, 5: 8, 6: 11, 7: 14, 8: 18, 9: 23, 10: 28 };
+    const SENTENCE_REWARDS = { 2: 5, 3: 9, 4: 13, 5: 18, 6: 22, 7: 28 };
+
+    // Výchozí text
+    const defaultText = `+Tábor
++Tábor Hlinice
++Vřesce
++Ratibořické hory
++Pohnánec
++Pohnání
++Rodná
++Bradáčov
++Radostovice
++Františkov
++Smilový Hory
+-Rodinná bradavice mile hoří v ohni
+-74
++Malý Ježov
++Velký Ježov
++Mezilesí
++Zelená ves
++Lukavec
+-Mrzutý František brzo ráno nesnídal brambory
+-97
++Štědrovice
++Křešín
++Chýštovice
++Studený
++Děkanovice
++Vítonice
++Blažejovice
++Snět
++Dolní Rápotice
++Zahrádčice
++Dolní Kralovice
+-Vyhrocený Vítek odřel tátovo sklo
+-Váhavý ježek podlezl ebenovitej strop
+-Štědrovečerní studená žranice se těžce nepovedla
+-267
++Střítež
++Bezděkov
++Chotěměřice
++Hněvkovice
++Hradec
++Kynice
++Vrbice
++Leština u Světlé
++Leština
++Štěpánov
+-Háklivá Leontýnka za dřevem děkovala ovčakovi od vinice
+-22
++Habry
++Rybníček
++Jakubovice
++Hostovlice
++Vilémov
++Vilémov Točice
++Kraborovice
++Úrov
++Spačice
++Běstvina
++Seč
+-Věřící leštitel silnic svěřil váleček Jakubovi
+-Nahněvané sestry kácely borovice chobotem
+-Otcovo
+-Věštba
+-Rybník
+-213
++Kovářov
++Holín
++Petříkovice
++Lipina
++Rabštejnská lhota
+-Kovář Petříček plácal cement na Rabštejn
+-Cecílie sebere vajíčkové ovoce
+-Ticho
+-Hosti
+-244
++Slatiňany
++Vlčkov
++Kočí
++Dolní Bezděkov
++Vejvanovice
++Hrochův Týnec
++Moravany
++Slepotice
++Moravany Čeradice
++Dolní Roveň-Horní Roveň
++Dolní Roveň-Litětiny
++Ostřetín Vysoká U Holic
+-Paličatá Lucie s hrochem barvila litinovou slepici
+-145
++Šachov
++Zdelov
++5
++Kostelec na Orlicí
++Lupenice
++Rychlov nad Kněžnou
+-Zpocený Vohnoj loví nedalekou hranici
+-Černé mraky letí
+-78`;
+
+    const inputArea = document.getElementById('inputText');
+    inputArea.value = defaultText;
+
+    // Debounce funkce pro automatické zpracování
+    let timeout = null;
+    inputArea.addEventListener('input', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(processGame, 1000);
+    });
+
+    function getLetters(text) {
+        let str = text.toLowerCase().replace(/[^a-zčřžýáíéóúůďťňšě]/g, '');
+        let chars = [];
+        for (let i = 0; i < str.length; i++) {
+            if (str[i] === 'c' && i + 1 < str.length && str[i+1] === 'h') {
+                chars.push('ch');
+                i++;
+            } else {
+                chars.push(str[i]);
+            }
+        }
+        return chars;
+    }
+
+    function getWordReward(len) {
+        if (len <= 0) return 0;
+        if (len > 10) return 28;
+        return WORD_REWARDS[len] || 0;
+    }
+
+    function getSentenceBonus(wordCount) {
+        if (wordCount < 2) return 0;
+        if (wordCount > 7) return 28;
+        return SENTENCE_REWARDS[wordCount] || 0;
+    }
+
+    function processGame() {
+        const lines = inputArea.value.split('\n');
+        const outputDiv = document.getElementById('output');
+        outputDiv.innerHTML = '';
+        let balance = 0;
+        let inventory = {};
+
+        lines.forEach(line => {
+            let trimmed = line.trim();
+            if (!trimmed) return;
+
+            let details = "";
+            let diff = 0;
+            let errors = [];
+            let prefix = trimmed[0];
+            let content = trimmed.substring(1).trim();
+
+            if (prefix === '+') {
+                if (/^\d+$/.test(content)) {
+                    let foundMoney = parseInt(content);
+                    diff = foundMoney;
+                    details = `Nález peněz: +${foundMoney} Kč`;
+                } else {
+                    let found = getLetters(content);
+                    found.forEach(char => inventory[char] = (inventory[char] || 0) + 1);
+                    details = `Získána písmena z obce: ${content} (počet: ${found.length})`;
+                }
+            } 
+            else if (prefix === '-') {
+                if (/^\d+$/.test(content)) {
+                    let cost = parseInt(content);
+                    diff = -cost;
+                    details = `Nákup: -${cost} Kč`;
+                } else {
+                    let rawWords = content.split(/\s+/).filter(w => w.length > 0);
+                    let needed = {};
+                    let wordParts = [];
+                    let wordTotalReward = 0;
+                    
+                    rawWords.forEach(w => {
+                        let l = getLetters(w);
+                        let reward = getWordReward(l.length);
+                        wordTotalReward += reward;
+                        wordParts.push(`${w} (${reward})`);
+                        l.forEach(c => {
+                            needed[c] = (needed[c] || 0) + 1;
+                        });
+                    });
+                    
+                    let bonus = getSentenceBonus(rawWords.length);
+                    
+                    for (let c in needed) {
+                        let has = inventory[c] || 0;
+                        if (has < needed[c]) {
+                            errors.push(`${c.toUpperCase()} (${needed[c] - has}x)`);
+                        }
+                    }
+
+                    if (errors.length === 0) {
+                        for (let c in needed) inventory[c] -= needed[c];
+                        diff = wordTotalReward + bonus;
+                        details = `${wordParts.join(' ')} + bonus ${bonus} = ${wordTotalReward} + ${bonus} = ${diff} Kč`;
+                    }
+                }
+            }
+
+            if (errors.length === 0) {
+                let oldBalance = balance;
+                balance += diff;
+                let statusLine = diff !== 0 ? `Stav: ${oldBalance} ${diff >= 0 ? '+' : '-'} ${Math.abs(diff)} = ${balance} Kč` : `Stav: ${balance} Kč`;
+                renderRow(trimmed, statusLine, details, inventory);
+            } else {
+                renderRow(trimmed, `CHYBA: Chybí: ${errors.join(', ')}`, "", inventory, true);
+            }
+        });
+    }
+
+    function renderRow(line, status, details, inventory, isError = false) {
+        let sortedKeys = Object.keys(inventory)
+            .filter(k => inventory[k] > 0)
+            .sort((a, b) => a.localeCompare(b, 'cs'));
+
+        let invHtml = sortedKeys.map(k => `<span class="char-tag">${k.toUpperCase()}: ${inventory[k]}</span>`).join(' ');
+        
+        const row = document.createElement('div');
+        row.className = `output-row ${isError ? 'error' : ''}`;
+        row.innerHTML = `
+            <div><strong>${line}</strong></div>
+            ${details ? `<div style="font-size: 0.85em; color: #666; margin-top: 4px;">${details}</div>` : ''}
+            <div class="stats">${status}</div>
+            <div class="inventory">${invHtml || '<span style="color:#999">Prázdný inventář</span>'}</div>
+        `;
+        document.getElementById('output').appendChild(row);
+    }
+
+    // Spustit úvodní zpracování
+    processGame();
+</script>
+</body>
+</html>
